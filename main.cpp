@@ -39,7 +39,33 @@ int main(int argc, char **argv)
     return (1);
   }
   printf("success!\n");
-  radio.setOutputPower(20);
+  // radio.setOutputPower(20);
+
+  LoRaWANNode node(&radio, &EU868);
+
+  uint64_t joinEUI = 0x3EA63435A61D7B5A;
+
+  uint64_t devEUI = 0x3EA63435A61D7B5B;
+
+  uint8_t nwkKey[] = {0xB6, 0xD7, 0x37, 0xEE, 0xFA, 0x73, 0x77, 0x93, 0x11, 0x05, 0x32, 0xF5, 0x7F, 0xBE, 0xF8, 0x71};
+
+  uint8_t appKey[] = {0x40, 0x9F, 0x0B, 0xA2, 0x17, 0xFC, 0x67, 0x7B, 0x64, 0x15, 0xB5, 0x1D, 0x28, 0xD1, 0xF6, 0xD1};
+
+  printf("[LoRaWAN] Attempting over-the-air activation ... ");
+  while (true)
+  {
+    state = node.beginOTAA(joinEUI, devEUI, nwkKey, appKey);
+    if (state >= RADIOLIB_ERR_NONE)
+    {
+      printf("success!\n");
+      break;
+    }
+    else
+    {
+      printf("failed, code ");
+      std::cout << state << std::endl;
+    }
+  }
 
   printf("[SX1280] Initializing ... ");
   state = radio1.begin();
@@ -49,21 +75,44 @@ int main(int argc, char **argv)
     return (1);
   }
   printf("success!\n");
+
   uint8_t c = 0;
 
   int messageNumber = 1;
   std::string messageContent = "Hello World!";
-
+  
   for (;;)
   {
+    // Creează un mesaj pentru a trimite
+    uint8_t message[] = "Hello LoRaWAN!";
+    uint8_t downlinkData[64];
+    size_t downlinkSize = sizeof(downlinkData);
+    printf("[LoRaWAN] Transmitting packet...\n");
+    state = node.sendReceive(message, sizeof(message), 10, downlinkData, &downlinkSize, false);
+    if (state == RADIOLIB_ERR_NONE) {
+      printf("Packet transmitted successfully!\n");
+      if (downlinkSize > 0) {
+        // Procesează datele primite
+        printf("Received downlink: ");
+        for (size_t i = 0; i < downlinkSize; i++) {
+          printf("%02X ", downlinkData[i]);
+        }
+        printf("\n");
+      }
+    } else {
+      printf("Packet transmission failed, code %d\n", state);
+    }
 
-    std::stringstream ss;
-    ss << " [# " << messageNumber << "]"
-       << ": " << messageContent;
+    // Așteaptă un interval adecvat între transmisii, respectând regulile de duty cycle
+    hal->delay(5000);
 
-    std::string combinedMessage = ss.str();
-    send(radio, combinedMessage);
-    messageNumber = messageNumber + 1;
+    // std::stringstream ss;
+    // ss << " [# " << messageNumber << "]"
+    //    << ": " << messageContent;
+
+    // std::string combinedMessage = ss.str();
+    // send(radio, combinedMessage);
+    // messageNumber = messageNumber + 1;
   }
 
   return (0);

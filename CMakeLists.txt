@@ -19,7 +19,7 @@ include_directories(/usr/local/include)
 include_directories(${WIRINGPI_INCLUDE_DIRS})
 
 # link both libraries
-target_link_libraries(${PROJECT_NAME} RadioLib pigpio  /usr/local/lib/libwiringPi.so)
+target_link_libraries(${PROJECT_NAME} RadioLib pigpio )
 
 # you can also specify RadioLib compile-time flags here
 #target_compile_definitions(${PROJECT_NAME} PUBLIC RADIOLIB_DEBUG RADIOLIB_VERBOSE)
