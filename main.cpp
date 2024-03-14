@@ -4,13 +4,23 @@
 #include <RadioLib.h>
 #include "PiHal.h"
 
+ uint64_t joinEUI = 0x3EA63435A61D7B5A;
+
+  uint64_t devEUI = 0x3EA63435A61D7B5B;
+
+  uint8_t nwkKey[] = {0xB6, 0xD7, 0x37, 0xEE, 0xFA, 0x73, 0x77, 0x93, 0x11, 0x05, 0x32, 0xF5, 0x7F, 0xBE, 0xF8, 0x71};
+
+  uint8_t appKey[] = {0x40, 0x9F, 0x0B, 0xA2, 0x17, 0xFC, 0x67, 0x7B, 0x64, 0x15, 0xB5, 0x1D, 0x28, 0xD1, 0xF6, 0xD1};
+
+
+
 PiHal *hal = new PiHal(0);
 
 // NSS pin:   25
 // DIO1 pin:  4
 // NRST pin:  17
-// BUSY pin:  27 //nu se foloseste nu merge rcv-ul pentru RFM95
-RFM95 radio = new Module(hal, 25, 4, 17);
+// BUSY pin:  27
+RFM95 radio = new Module(hal, 25, 4, 17, 27);
 
 // NSS pin:   12
 // DIO1 pin:  5
@@ -23,6 +33,28 @@ void send(T radio, std::string message);
 
 template <typename T>
 void recv(T radio);
+void init(LoRaWANNode node)
+{
+  printf("[LoRaWAN] Attempting over-the-air activation ... ");
+  while (true)
+  {
+  int  state = node.beginOTAA(joinEUI, devEUI, nwkKey, appKey);
+    if (state >= RADIOLIB_ERR_NONE)
+    {
+      printf("success!\n");
+      break;
+    }
+    else
+    {
+      printf("failed, code ");
+      std::cout << state << std::endl;
+    }
+  }
+  node.setADR(false);
+  node.setDatarate(5);
+  node.setDutyCycle(false);
+  node.setDwellTime(false);
+}
 
 int main(int argc, char **argv)
 {
@@ -32,7 +64,7 @@ int main(int argc, char **argv)
     return 1;
   }
   printf("[RFM95] Initializing ... ");
-  int state = radio.begin(868.0);
+  int state = radio.begin(868.0, 500.0, 9);
   if (state != RADIOLIB_ERR_NONE)
   {
     printf("failed, code %d\n", state);
@@ -42,14 +74,6 @@ int main(int argc, char **argv)
   // radio.setOutputPower(20);
 
   LoRaWANNode node(&radio, &EU868);
-
-  uint64_t joinEUI = 0x3EA63435A61D7B5A;
-
-  uint64_t devEUI = 0x3EA63435A61D7B5B;
-
-  uint8_t nwkKey[] = {0xB6, 0xD7, 0x37, 0xEE, 0xFA, 0x73, 0x77, 0x93, 0x11, 0x05, 0x32, 0xF5, 0x7F, 0xBE, 0xF8, 0x71};
-
-  uint8_t appKey[] = {0x40, 0x9F, 0x0B, 0xA2, 0x17, 0xFC, 0x67, 0x7B, 0x64, 0x15, 0xB5, 0x1D, 0x28, 0xD1, 0xF6, 0xD1};
 
   printf("[LoRaWAN] Attempting over-the-air activation ... ");
   while (true)
@@ -66,7 +90,11 @@ int main(int argc, char **argv)
       std::cout << state << std::endl;
     }
   }
-
+  node.setADR(false);
+  node.setDatarate(3);
+  node.setCSMA(6, 2, true);
+ node.setDutyCycle(false);
+  node.setDwellTime(false);
   printf("[SX1280] Initializing ... ");
   state = radio1.begin();
   if (state != RADIOLIB_ERR_NONE)
@@ -80,7 +108,7 @@ int main(int argc, char **argv)
 
   int messageNumber = 1;
   std::string messageContent = "Hello World!";
-  
+
   for (;;)
   {
     // Creează un mesaj pentru a trimite
@@ -89,22 +117,35 @@ int main(int argc, char **argv)
     size_t downlinkSize = sizeof(downlinkData);
     printf("[LoRaWAN] Transmitting packet...\n");
     state = node.sendReceive(message, sizeof(message), 10, downlinkData, &downlinkSize, false);
-    if (state == RADIOLIB_ERR_NONE) {
-      printf("Packet transmitted successfully!\n");
-      if (downlinkSize > 0) {
+    if (state == RADIOLIB_ERR_NONE)
+    {
+      //   printf("Packet transmitted successfully!\n");
+      if (downlinkSize > 0)
+      {
         // Procesează datele primite
         printf("Received downlink: ");
-        for (size_t i = 0; i < downlinkSize; i++) {
+        for (size_t i = 0; i < downlinkSize; i++)
+        {
           printf("%02X ", downlinkData[i]);
         }
         printf("\n");
+
+        std::cout<<"Frequency: "<<radio.getFrequencyError() <<std::endl; 
+
       }
-    } else {
+    }
+    else
+    {
       printf("Packet transmission failed, code %d\n", state);
     }
+    uint32_t interval = node.timeUntilUplink();
+    std::cout << interval << std::endl;
 
-    // Așteaptă un interval adecvat între transmisii, respectând regulile de duty cycle
-    hal->delay(5000);
+    if (interval > 3000)
+    {
+      //  init(node);
+    }
+    hal->delay(interval);
 
     // std::stringstream ss;
     // ss << " [# " << messageNumber << "]"
