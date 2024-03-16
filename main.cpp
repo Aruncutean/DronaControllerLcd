@@ -2,99 +2,48 @@
 #include <string>
 #include <sstream>
 #include <RadioLib.h>
-#include "PiHal.h"
-
- uint64_t joinEUI = 0x3EA63435A61D7B5A;
-
-  uint64_t devEUI = 0x3EA63435A61D7B5B;
-
-  uint8_t nwkKey[] = {0xB6, 0xD7, 0x37, 0xEE, 0xFA, 0x73, 0x77, 0x93, 0x11, 0x05, 0x32, 0xF5, 0x7F, 0xBE, 0xF8, 0x71};
-
-  uint8_t appKey[] = {0x40, 0x9F, 0x0B, 0xA2, 0x17, 0xFC, 0x67, 0x7B, 0x64, 0x15, 0xB5, 0x1D, 0x28, 0xD1, 0xF6, 0xD1};
-
-
-
-PiHal *hal = new PiHal(0);
-
-// NSS pin:   25
-// DIO1 pin:  4
-// NRST pin:  17
-// BUSY pin:  27
-RFM95 radio = new Module(hal, 25, 4, 17, 27);
-
-// NSS pin:   12
-// DIO1 pin:  5
-// NRST pin:  13
-// BUSY pin:  6
-SX1280 radio1 = new Module(hal, 12, 5, 13, 6);
+#include "include/PiHal.h"
+#include "include/Serial.h"
+#include "include/Msp.h"
+#include <gps.h>
+#include <nmea.h>
 
 template <typename T>
 void send(T radio, std::string message);
 
 template <typename T>
 void recv(T radio);
-void init(LoRaWANNode node)
-{
-  printf("[LoRaWAN] Attempting over-the-air activation ... ");
-  while (true)
-  {
-  int  state = node.beginOTAA(joinEUI, devEUI, nwkKey, appKey);
-    if (state >= RADIOLIB_ERR_NONE)
-    {
-      printf("success!\n");
-      break;
-    }
-    else
-    {
-      printf("failed, code ");
-      std::cout << state << std::endl;
-    }
-  }
-  node.setADR(false);
-  node.setDatarate(5);
-  node.setDutyCycle(false);
-  node.setDwellTime(false);
-}
 
 int main(int argc, char **argv)
 {
+
   if (gpioInitialise() < 0)
   {
     fprintf(stderr, "Nu s-a putut inițializa pigpio\n");
     return 1;
   }
+  PiHal *hal = new PiHal(0);
+  // NSS pin:   25
+  // DIO1 pin:  4
+  // NRST pin:  17
+  // BUSY pin:  27 //nu se foloseste nu merge rcv-ul pentru RFM95
+  RFM95 radio0 = new Module(hal, 25, 4, 17);
+
+  // NSS pin:   12
+  // DIO1 pin:  5
+  // NRST pin:  13
+  // BUSY pin:  6
+  SX1280 radio1 = new Module(hal, 12, 5, 13, 6);
   printf("[RFM95] Initializing ... ");
-  int state = radio.begin(868.0, 500.0, 9);
+  int state = radio0.begin(868.0);
   if (state != RADIOLIB_ERR_NONE)
   {
     printf("failed, code %d\n", state);
     return (1);
   }
   printf("success!\n");
-  // radio.setOutputPower(20);
+  radio0.setOutputPower(20);
 
-  LoRaWANNode node(&radio, &EU868);
-
-  printf("[LoRaWAN] Attempting over-the-air activation ... ");
-  while (true)
-  {
-    state = node.beginOTAA(joinEUI, devEUI, nwkKey, appKey);
-    if (state >= RADIOLIB_ERR_NONE)
-    {
-      printf("success!\n");
-      break;
-    }
-    else
-    {
-      printf("failed, code ");
-      std::cout << state << std::endl;
-    }
-  }
-  node.setADR(false);
-  node.setDatarate(3);
-  node.setCSMA(6, 2, true);
- node.setDutyCycle(false);
-  node.setDwellTime(false);
   printf("[SX1280] Initializing ... ");
   state = radio1.begin();
   if (state != RADIOLIB_ERR_NONE)
@@ -104,58 +53,45 @@ int main(int argc, char **argv)
   }
   printf("success!\n");
 
-  uint8_t c = 0;
-
-  int messageNumber = 1;
-  std::string messageContent = "Hello World!";
+  Msp msp("serial0", 115200);
 
   for (;;)
   {
-    // Creează un mesaj pentru a trimite
-    uint8_t message[] = "Hello LoRaWAN!";
-    uint8_t downlinkData[64];
-    size_t downlinkSize = sizeof(downlinkData);
-    printf("[LoRaWAN] Transmitting packet...\n");
-    state = node.sendReceive(message, sizeof(message), 10, downlinkData, &downlinkSize, false);
-    if (state == RADIOLIB_ERR_NONE)
+
+    // Adaugă o mică pauză pentru a reduce utilizarea intensivă a CPU
+
+    msp.sendMSPRequest(MSP_MODE_RANGES);
+    try
     {
-      //   printf("Packet transmitted successfully!\n");
-      if (downlinkSize > 0)
-      {
-        // Procesează datele primite
-        printf("Received downlink: ");
-        for (size_t i = 0; i < downlinkSize; i++)
-        {
-          printf("%02X ", downlinkData[i]);
-        }
-        printf("\n");
-
-        std::cout<<"Frequency: "<<radio.getFrequencyError() <<std::endl; 
-
-      }
+      msp.procesareMessage(msp.readMSPResponse());
     }
-    else
+    catch (const std::exception &e)
     {
-      printf("Packet transmission failed, code %d\n", state);
+      std::cerr << e.what() << '\n';
     }
-    uint32_t interval = node.timeUntilUplink();
-    std::cout << interval << std::endl;
-
-    if (interval > 3000)
+    hal->delay(100);
+    msp.sendMSPRequest(MSP_STATUS);
+    try
     {
-      //  init(node);
+      msp.procesareMessage(msp.readMSPResponse());
     }
-    hal->delay(interval);
+    catch (const std::exception &e)
+    {
+      std::cerr << e.what() << '\n';
+    }
 
-    // std::stringstream ss;
-    // ss << " [# " << messageNumber << "]"
-    //    << ": " << messageContent;
-
-    // std::string combinedMessage = ss.str();
-    // send(radio, combinedMessage);
-    // messageNumber = messageNumber + 1;
+    msp.sendMSPRequest(MSP_RX);
+    try
+    {
+      msp.procesareMessage(msp.readMSPResponse());
+    }
+    catch (const std::exception &e)
+    {
+      std::cerr << e.what() << '\n';
+    }
+    std::vector<uint16_t> channels = {1500, 1500, 1000, 1500, 1500, 1000, 1000, 1000}; // Valorile exemplu pentru canale
+    msp.setMspRx(channels);
   }
-
   return (0);
 }
 
@@ -163,8 +99,7 @@ template <typename T>
 void send(T radio, std::string message)
 {
   const char *transmitBuffer = message.c_str();
-  // send a packet
-  printf("[SX1262] Transmitting packet ... ");
+  printf("Transmitting packet ... ");
   std::cout << transmitBuffer;
   int state = radio.transmit(transmitBuffer);
   if (state == RADIOLIB_ERR_NONE)

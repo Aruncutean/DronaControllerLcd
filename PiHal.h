@@ -36,8 +36,8 @@ public:
       spiBegin();
 
       // Waveshare LoRaWAN Hat also needs pin 18 to be pulled high to enable the radio
-      gpioSetMode(18, PI_OUTPUT);
-      gpioWrite(18, PI_HIGH);
+     // gpioSetMode(18, PI_OUTPUT);
+     // gpioWrite(18, PI_HIGH);
     }
   }
 
@@ -47,8 +47,8 @@ public:
     spiEnd();
 
     // pull the enable pin low
-    gpioSetMode(18, PI_OUTPUT);
-    gpioWrite(18, PI_LOW);
+    //gpioSetMode(18, PI_OUTPUT);
+   // gpioWrite(18, PI_LOW);
 
     // finally, stop the pigpio library
     gpioTerminate();
